@@ -459,9 +459,13 @@ class Okta:
             Bool if a push factor was used and it succeeds
         """
         response_types = ["sms", "question", "call", "token:software:totp"]
+        otp_factors = []
         push_factors = []
         response_factors = []
         for factor in ret["_embedded"]["factors"]:
+            if factor["factorType"] == "token:software:totp":
+                LOG.debug("OTP factor found")
+                otp_factors.append(factor)
             if factor["factorType"] == "push":
                 LOG.debug("Okta Verify factor found")
                 push_factors.append(factor)
@@ -472,7 +476,7 @@ class Okta:
                 LOG.debug("{} factor found".format(factor["factorType"]))
                 response_factors.append(factor)
 
-        if len(response_factors) + len(push_factors) == 0:
+        if len(otp_factors) + len(response_factors) + len(push_factors) == 0:
             LOG.debug(
                 "Factors from Okta: {}".format(
                     ret["_embedded"]["factors"],
@@ -480,6 +484,9 @@ class Okta:
             )
             LOG.fatal("No supported MFA types found")
             raise UnknownError("No supported MFA types found")
+
+        if self.handle_response_factors(otp_factors, ret["stateToken"]):
+            return True
 
         if self.handle_push_factors(push_factors, ret["stateToken"]):
             return True
@@ -517,6 +524,8 @@ class Okta:
             factors: Dict of supported MFA push factors from Okta
             state_token: String, Okta state token
         """
+        google_provider = None
+        google_factor = None
         otp_provider = None
         otp_factor = None
         for factor in factors:
@@ -535,8 +544,19 @@ class Okta:
             if factor["factorType"] == "question":
                 raise AnswerRequired(factor, state_token)
             if factor["factorType"] == "token:software:totp":
-                otp_provider = factor["provider"]
-                otp_factor = factor["id"]
+                if factor["provider"] == "GOOGLE":
+                    google_provider = factor["provider"]
+                    google_factor = factor["id"]
+                else:
+                    otp_provider = factor["provider"]
+                    otp_factor = factor["id"]
+
+        if otp_provider:
+            raise PasscodeRequired(
+                fid=google_factor,
+                state_token=state_token,
+                provider=google_provider,
+            )
 
         if otp_provider:
             raise PasscodeRequired(

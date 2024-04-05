@@ -312,8 +312,8 @@ class Keyman:
         self.log.warning(msg)
 
         factors = [
-            {"name": "📲 Duo Push", "factor": "push"},
             {"name": "📟 OTP Passcode", "factor": "passcode"},
+            {"name": "📲 Duo Push", "factor": "push"},
             {"name": "📞 Phone call", "factor": "call"},
         ]
         header = [{"name": "Duo Factor"}]
